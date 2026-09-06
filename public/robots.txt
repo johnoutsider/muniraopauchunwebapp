@@ -1,0 +1,29 @@
+# LinguaEcon AI — robots.txt
+# Faqat marketing sahifalari indekslanadi. Platforma ichi (talaba/o'qituvchi/
+# tadqiqotchi/admin) va API — yopiq: u yerda tadqiqot ishtirokchilarining
+# ma'lumotlari bor (PLAN 9.4 — etika).
+
+User-agent: *
+Allow: /$
+Allow: /about
+Allow: /icon.svg
+Allow: /manifest.webmanifest
+Disallow: /student
+Disallow: /teacher
+Disallow: /researcher
+Disallow: /admin
+Disallow: /api
+Disallow: /login
+Disallow: /register
+Disallow: /reset-password
+Disallow: /consent
+Disallow: /onboarding
+
+# AI kraulerlari — o'quv kontenti va ishtirokchi ma'lumotlari yig'ilmasin
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+Sitemap: https://linguaecon.uz/sitemap.xml

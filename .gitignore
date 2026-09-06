@@ -1,0 +1,33 @@
+node_modules/
+.next/
+out/
+build/
+.env
+.env.local
+.env*.local
+*.log
+npm-debug.log*
+.DS_Store
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+serviceAccount*.json
+scripts/out/
+scripts/corpus-src/
+functions/lib/
+functions/node_modules/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# lokal dev server logi
+dev.log
+prod.log
+
+# Firebase loyiha aliaslari (.firebaserc.example dan nusxa oling)
+.firebaserc

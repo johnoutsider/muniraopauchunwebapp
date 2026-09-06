@@ -1,0 +1,37 @@
+{
+  "common": {
+    "appName": "LinguaEcon AI",
+    "loading": "Yuklanmoqda...",
+    "save": "Saqlash",
+    "cancel": "Bekor qilish",
+    "next": "Keyingi",
+    "back": "Orqaga",
+    "submit": "Yuborish",
+    "search": "Qidirish",
+    "logout": "Chiqish",
+    "error": "Xatolik yuz berdi"
+  },
+  "nav": {
+    "dashboard": "Bosh sahifa",
+    "path": "Mening yo'nalishim",
+    "learn": "Darslar",
+    "aiTeacher": "AI o'qituvchi",
+    "practice": "Mashqlar",
+    "speaking": "Speaking laboratoriyasi",
+    "writing": "Writing laboratoriyasi",
+    "communication": "Muloqot markazi",
+    "projects": "Guruh loyihalari",
+    "assessment": "Baholash markazi",
+    "portfolio": "Portfolio",
+    "reflection": "Refleksiya",
+    "promptLab": "Prompt Lab",
+    "achievements": "Yutuqlar",
+    "settings": "Sozlamalar"
+  },
+  "auth": {
+    "login": "Kirish",
+    "email": "Elektron pochta",
+    "password": "Parol",
+    "forgot": "Parolni unutdingizmi?"
+  }
+}

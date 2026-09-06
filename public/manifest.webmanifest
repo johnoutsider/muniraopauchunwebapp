@@ -1,0 +1,51 @@
+{
+  "name": "LinguaEcon AI — Professional English for Economics",
+  "short_name": "LinguaEcon",
+  "description": "Iqtisodiyot yo'nalishi talabalari uchun AI asosidagi professional ingliz tili platformasi: adaptiv mashqlar, AI tutor, talaffuz laboratoriyasi va portfolio.",
+  "id": "/",
+  "start_url": "/student/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "lang": "uz",
+  "dir": "ltr",
+  "theme_color": "#1659B5",
+  "background_color": "#FBFCFE",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Bugungi vazifalar",
+      "short_name": "Vazifalar",
+      "url": "/student/dashboard"
+    },
+    {
+      "name": "AI o'qituvchi",
+      "short_name": "AI Teacher",
+      "url": "/student/ai-teacher"
+    },
+    {
+      "name": "Talaffuz laboratoriyasi",
+      "short_name": "Speaking",
+      "url": "/student/speaking-lab"
+    },
+    {
+      "name": "Mashqlar",
+      "short_name": "Practice",
+      "url": "/student/practice"
+    }
+  ]
+}

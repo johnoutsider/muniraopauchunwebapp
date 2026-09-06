@@ -1,0 +1,601 @@
+rules_version = '2';
+
+/**
+ * LinguaEcon AI — Firestore xavfsizlik qoidalari
+ * PLAN.md 4-bo'lim (ma'lumotlar modeli) va 10-bo'lim (xavfsizlik) asosida.
+ *
+ * ASOSIY TAMOYIL:
+ *   1) Default deny — pastda ochiq aytilmagan hamma narsa taqiqlangan.
+ *   2) Yozish asosan SERVER tomonda (Vercel Route Handler / Server Action / Cloud
+ *      Functions) Admin SDK orqali bo'ladi. Admin SDK bu qoidalarni chetlab o'tadi,
+ *      shuning uchun klient uchun yozish huquqi ataylab juda tor:
+ *        chat xabarlari, presence, refleksiya, forum thread/post, loyiha umumiy
+ *        hujjati, bildirishnoma "o'qildi" bayrog'i va o'z profilining 3 maydoni.
+ *   3) Talaba faqat O'Z hujjatlarini o'qiydi.
+ *   4) O'qituvchi faqat O'Z guruhlari (token.groupIds) talabalarini ko'radi.
+ *   5) Tadqiqotchi agregat/ilmiy kolleksiyalarni o'qiydi, lekin chat matnlari va
+ *      shaxsiy yozishmalarni KO'RMAYDI (9.4 — etika).
+ *   6) events_* — append-only audit yo'li: klient umuman yoza olmaydi.
+ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* =============================================================== */
+    /* YORDAMCHI FUNKSIYALAR                                            */
+    /* =============================================================== */
+
+    // Foydalanuvchi tizimga kirganmi (sessiya cookie emas, Firebase ID token).
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Rol custom claim'dan olinadi (PLAN 2-bo'lim: role, groupId, groupIds, expGroup).
+    function role() {
+      return isSignedIn() ? request.auth.token.get('role', 'student') : '';
+    }
+
+    function isAdmin()      { return role() == 'admin'; }
+    function isTeacher()    { return role() == 'teacher'; }
+    function isResearcher() { return role() == 'researcher'; }
+    function isStudent()    { return role() == 'student'; }
+
+    // Kontentni boshqaradigan xodimlar (draft materiallarni ko'radi).
+    function isStaff() { return isTeacher() || isAdmin(); }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Talaba shu guruhga tegishlimi (token.groupId).
+    function inGroup(groupId) {
+      return isSignedIn() && request.auth.token.get('groupId', '') == groupId;
+    }
+
+    // O'qituvchi shu guruhga biriktirilganmi (token.groupIds massivi).
+    function teachesGroup(groupId) {
+      return isTeacher() && groupId in request.auth.token.get('groupIds', []);
+    }
+
+    // Hujjatdagi groupId maydoni bo'yicha o'qituvchi tekshiruvi (arzon — get() yo'q).
+    function teachesDocGroup(data) {
+      return isTeacher() && teachesGroup(data.get('groupId', '__none__'));
+    }
+
+    // Hujjatda groupId bo'lmasa — users/{uid} orqali tekshiramiz (bitta qo'shimcha o'qish).
+    function studentGroupOf(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.get('groupId', '__none__');
+    }
+
+    function teachesStudent(uid) {
+      return isTeacher() && teachesGroup(studentGroupOf(uid));
+    }
+
+    // Talabaning o'z hujjati YOKI uning o'qituvchisi YOKI admin.
+    function ownerOrTeacherOrAdmin(uid) {
+      return isOwner(uid) || isAdmin() || teachesStudent(uid);
+    }
+
+    // Faqat sanab o'tilgan maydonlar o'zgartirilganmi (update uchun).
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    /* =============================================================== */
+    /* 1. FOYDALANUVCHILAR VA TASHKILOT                                 */
+    /* =============================================================== */
+
+    /**
+     * users/{uid}
+     *  O'qish: o'zi; o'z guruhidagi o'qituvchi; admin; tadqiqotchi (ishtirokchi
+     *          ro'yxati va participantCode mapping'i uchun — 9.3).
+     *  Yozish: FAQAT o'zining 3 ta "kosmetik" maydoni. Rol, guruh, expGroup,
+     *          participantCode, consent, status — hammasi server (Admin SDK) orqali,
+     *          aks holda talaba o'zini eksperimental guruhga ko'chirib yuborardi.
+     */
+    match /users/{uid} {
+      allow get, list: if isOwner(uid) || isAdmin() || isResearcher() || teachesStudent(uid);
+      allow update: if isOwner(uid)
+                    && onlyChanges(['displayName', 'locale', 'photoURL']);
+      allow create, delete: if false;
+    }
+
+    /** cohorts — kohortlar. Xodimlar va tadqiqotchi o'qiydi; CRUD faqat serverda. */
+    match /cohorts/{cohortId} {
+      allow read: if isStaff() || isResearcher();
+      allow write: if false;
+    }
+
+    /**
+     * groups — guruh va uning featureFlags'i. Talaba o'z guruhini o'qishi kerak
+     * (UI qaysi AI elementlarini ko'rsatishni biladi), lekin flaglarni server ham
+     * qayta tekshiradi (PLAN 17: nazorat guruhi AI ko'rib qolmasligi uchun).
+     */
+    match /groups/{groupId} {
+      allow read: if isAdmin() || isResearcher() || teachesGroup(groupId) || inGroup(groupId);
+      allow write: if false;
+    }
+
+    /** settings/global — global flaglar, model nomlari, e'lon. Hamma o'qiydi. */
+    match /settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    /** auditLogs — faqat admin o'qiydi; yozish faqat server. */
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    /* =============================================================== */
+    /* 2. O'QUV KONTENTI (CMS)                                          */
+    /* =============================================================== */
+
+    /**
+     * Nashr etilgan kontent — har qanday tizimga kirgan foydalanuvchi uchun ochiq.
+     * Draft/nashr etilmagan — faqat o'qituvchi va admin (human-in-the-loop tasdiq oqimi).
+     */
+    match /courses/{courseId} {
+      allow read: if isSignedIn() && (resource.data.get('published', false) == true || isStaff());
+      allow write: if false;
+    }
+
+    match /modules/{moduleId} {
+      allow read: if isSignedIn() && (resource.data.get('published', false) == true || isStaff());
+      allow write: if false;
+    }
+
+    match /lessons/{lessonId} {
+      allow read: if isSignedIn() && (resource.data.get('published', false) == true || isStaff());
+      allow write: if false;
+    }
+
+    /**
+     * items — mashq banki. Talaba faqat `approved` itemlarni ko'radi.
+     * AI generatsiya qilgan draftlar o'qituvchi tasdig'ini kutadi (PLAN 7.4).
+     * Tadqiqotchi item metadatasini (difficulty, skill) o'qiy oladi — tahlil uchun.
+     */
+    match /items/{itemId} {
+      allow read: if isSignedIn()
+                  && (resource.data.get('status', 'draft') == 'approved'
+                      || isStaff() || isResearcher());
+      allow write: if false;
+    }
+
+    match /lexicon/{wordId} {
+      allow read: if isSignedIn() && (resource.data.get('status', 'draft') == 'approved' || isStaff());
+      allow write: if false;
+    }
+
+    match /semanticNetworks/{netId} {
+      allow read: if isSignedIn() && (resource.data.get('approved', false) == true || isStaff());
+      allow write: if false;
+    }
+
+    match /caseStudies/{caseId} {
+      allow read: if isSignedIn() && (resource.data.get('published', false) == true || isStaff());
+      allow write: if false;
+    }
+
+    match /scenarios/{scenarioId} {
+      allow read: if isSignedIn() && (resource.data.get('published', false) == true || isStaff());
+      allow write: if false;
+    }
+
+    /** promptExercises — 3-bosqich Prompt Practice Lab mashqlari. */
+    match /promptExercises/{exId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    /** badges — gamifikatsiya ta'riflari, hamma ko'radi. */
+    match /badges/{badgeId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    /**
+     * tests — pre/post/diagnostic/progress. Talaba faqat O'Z guruhiga
+     * biriktirilgan testni ko'radi (assignedTo.groupIds), aks holda post-test
+     * savollarini oldindan ko'rib olishi mumkin edi.
+     */
+    match /tests/{testId} {
+      allow read: if isStaff() || isResearcher()
+                  || (isStudent()
+                      && request.auth.token.get('groupId', '__none__')
+                         in resource.data.get('assignedTo', {}).get('groupIds', []));
+      allow write: if false;
+    }
+
+    /** surveys — faqat aktiv so'rovnomalar talabaga ko'rinadi. */
+    match /surveys/{surveyId} {
+      allow read: if isSignedIn()
+                  && (resource.data.get('active', false) == true || isStaff() || isResearcher());
+      allow write: if false;
+    }
+
+    /* =============================================================== */
+    /* 3. KORPUS (Corpus Verification, PLAN 8.16)                       */
+    /* =============================================================== */
+
+    /** corpusNgrams — "verified ✓ / not attested ✗" tekshiruvi uchun ochiq o'qish. */
+    match /corpusNgrams/{ngram} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    /** corpusDocs — manba metadatasi; faqat xodimlar va tadqiqotchi. */
+    match /corpusDocs/{docId} {
+      allow read: if isStaff() || isResearcher();
+      allow write: if false;
+    }
+
+    /* =============================================================== */
+    /* 4. TALABA FAOLIYATI — "faqat o'zim" o'qish                       */
+    /* =============================================================== */
+
+    /** learningPaths/{uid} — individual o'quv yo'li. Yozish: server (rules/AI generatsiya). */
+    match /learningPaths/{uid} {
+      allow read: if ownerOrTeacherOrAdmin(uid);
+      allow write: if false;
+    }
+
+    /** mastery/{uid}/skills/{skillId} — BKT holati. */
+    match /mastery/{uid} {
+      allow read: if ownerOrTeacherOrAdmin(uid);
+      allow write: if false;
+      match /skills/{skillId} {
+        allow read: if ownerOrTeacherOrAdmin(uid);
+        allow write: if false;
+      }
+    }
+
+    /**
+     * attempts — har bir mashq urinishi. Ilmiy ma'lumotning asosiy manbai,
+     * shuning uchun tadqiqotchi ham o'qiy oladi (matn emas, ball va errorTags).
+     * Yozish faqat server: klient isCorrect=true deb yozib qo'ymasligi uchun.
+     */
+    match /attempts/{attemptId} {
+      allow get, list: if isOwner(resource.data.uid)
+                       || isAdmin() || isResearcher()
+                       || teachesDocGroup(resource.data);
+      allow write: if false;
+    }
+
+    /** testAttempts — pre/post test natijalari (eksperimentning asosiy o'lchovi). */
+    match /testAttempts/{attemptId} {
+      allow get, list: if isOwner(resource.data.uid)
+                       || isAdmin() || isResearcher()
+                       || teachesStudent(resource.data.uid);
+      allow write: if false;
+    }
+
+    /** userVocab/{uid}/words/{wordId} — SRS holati. */
+    match /userVocab/{uid} {
+      allow read: if ownerOrTeacherOrAdmin(uid);
+      allow write: if false;
+      match /words/{wordId} {
+        allow read: if ownerOrTeacherOrAdmin(uid);
+        allow write: if false;
+      }
+    }
+
+    /**
+     * aiSessions + messages — AI tutor yozishmalari.
+     * Talaba o'zinikini o'qiydi, o'qituvchi o'z talabasinikini (metodik nazorat).
+     * TADQIQOTCHI KO'RA OLMAYDI: xabar matnlari shaxsiy; tadqiqotga faqat
+     * agregatlar (xabar soni, tokenlar) events_* va statsDaily orqali tushadi.
+     */
+    match /aiSessions/{sessionId} {
+      allow get, list: if isOwner(resource.data.uid) || isAdmin()
+                       || teachesStudent(resource.data.uid);
+      allow write: if false;
+
+      match /messages/{msgId} {
+        // Sessiya egasini bir marta o'qiymiz (get() limiti tejaladi).
+        function sessionOwner() {
+          return get(/databases/$(database)/documents/aiSessions/$(sessionId)).data.uid;
+        }
+
+        allow get, list: if isAdmin()
+                         || isOwner(sessionOwner())
+                         || teachesStudent(sessionOwner());
+        // Yozish yo'q: xabarlar streaming route handler orqali serverda yoziladi.
+        allow write: if false;
+      }
+    }
+
+    /** speakingSubmissions — audio + Azure ballari. */
+    match /speakingSubmissions/{subId} {
+      allow get, list: if isOwner(resource.data.uid)
+                       || isAdmin() || isResearcher()
+                       || teachesDocGroup(resource.data)
+                       || teachesStudent(resource.data.uid);
+      allow write: if false;
+    }
+
+    /** writingSubmissions — draftlar, AI feedback, o'qituvchi bahosi. */
+    match /writingSubmissions/{subId} {
+      allow get, list: if isOwner(resource.data.uid)
+                       || isAdmin() || isResearcher()
+                       || teachesDocGroup(resource.data)
+                       || teachesStudent(resource.data.uid);
+      allow write: if false;
+    }
+
+    /**
+     * reflections — refleksiya kundaligi (1 va 8-bosqich).
+     * Bu KLIENT YOZADIGAN kam sonli kolleksiyalardan biri: oddiy matn, AI yo'q,
+     * server oralig'i shart emas. Faqat o'z uid'i bilan yaratish mumkin.
+     */
+    match /reflections/{reflectionId} {
+      allow get, list: if isOwner(resource.data.uid)
+                       || isAdmin() || isResearcher()
+                       || teachesStudent(resource.data.uid);
+      allow create: if isOwner(request.resource.data.uid)
+                    && request.resource.data.keys().hasAll(['uid', 'stage', 'answers', 'ts'])
+                    && request.resource.data.mood is int
+                    && request.resource.data.mood >= 1
+                    && request.resource.data.mood <= 5;
+      allow update: if isOwner(resource.data.uid)
+                    && onlyChanges(['answers', 'mood']);
+      allow delete: if false;
+    }
+
+    /** portfolioItems — avtomatik yig'iladi; talaba faqat "pin" va izohni o'zgartiradi. */
+    match /portfolioItems/{itemId} {
+      allow get, list: if isOwner(resource.data.uid)
+                       || isAdmin()
+                       || teachesStudent(resource.data.uid);
+      allow update: if isOwner(resource.data.uid) && onlyChanges(['pinned', 'note']);
+      allow create, delete: if false;
+    }
+
+    /** errorProfiles/{uid} — xatolar taksonomiyasi bo'yicha profil. */
+    match /errorProfiles/{uid} {
+      allow read: if ownerOrTeacherOrAdmin(uid) || isResearcher();
+      allow write: if false;
+    }
+
+    /** xpEvents, userBadges, streaks — gamifikatsiya (yozish: server). */
+    match /xpEvents/{eventId} {
+      allow get, list: if isOwner(resource.data.uid) || isAdmin()
+                       || teachesStudent(resource.data.uid);
+      allow write: if false;
+    }
+
+    match /userBadges/{uid} {
+      allow read: if isSignedIn();  // badge'lar leaderboard'da ko'rinadi
+      allow write: if false;
+      match /badges/{badgeId} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+    }
+
+    match /streaks/{uid} {
+      allow read: if ownerOrTeacherOrAdmin(uid);
+      allow write: if false;
+    }
+
+    /** surveyResponses — so'rovnoma javoblari (motivatsiya, AI literacy, qoniqish). */
+    match /surveyResponses/{responseId} {
+      allow get, list: if isOwner(resource.data.uid) || isAdmin() || isResearcher();
+      allow write: if false;   // server validatsiya qilib yozadi
+    }
+
+    /** peerReviews — o'zaro baholash. Ko'rinadi: muallif, baholanuvchi, o'qituvchi. */
+    match /peerReviews/{reviewId} {
+      allow get, list: if isOwner(resource.data.reviewerUid)
+                       || isOwner(resource.data.targetUid)
+                       || isAdmin()
+                       || teachesStudent(resource.data.targetUid);
+      allow write: if false;
+    }
+
+    /* =============================================================== */
+    /* 5. GURUH ISHI — Group Project Zone (PLAN 8.10)                   */
+    /* =============================================================== */
+
+    /**
+     * projects — case study loyihasi.
+     * A'zolar umumiy hujjatni (sharedDoc) TO'G'RIDAN-TO'G'RI yozadi: "last write
+     * wins" + versiya raqami. Boshqa maydonlar (baholar, status) faqat serverda.
+     */
+    match /projects/{projectId} {
+      allow get, list: if isSignedIn()
+                       && (request.auth.uid in resource.data.get('memberUids', [])
+                           || isAdmin() || isResearcher()
+                           || teachesDocGroup(resource.data));
+      allow update: if isSignedIn()
+                    && request.auth.uid in resource.data.get('memberUids', [])
+                    && onlyChanges(['sharedDoc', 'sharedDocVersion', 'taskStatus',
+                                    'solution', 'report']);
+      allow create, delete: if false;
+
+      /** contributions/{uid} — individual hissa hisobi (analitika uchun, server yozadi). */
+      match /contributions/{uid} {
+        allow read: if isSignedIn()
+                    && (isOwner(uid) || isAdmin() || isResearcher()
+                        || request.auth.uid in
+                           get(/databases/$(database)/documents/projects/$(projectId))
+                             .data.get('memberUids', []));
+        allow write: if false;
+      }
+    }
+
+    /** assignments — o'qituvchi bergan topshiriqlar (deadline bilan). */
+    match /assignments/{assignmentId} {
+      allow get, list: if isAdmin()
+                       || teachesDocGroup(resource.data)
+                       || inGroup(resource.data.get('groupId', '__none__'));
+      allow write: if false;
+    }
+
+    /* =============================================================== */
+    /* 6. KOMMUNIKATSIYA — klient yozadigan qism (PLAN 8.9)             */
+    /* =============================================================== */
+
+    /**
+     * chats/{chatId} — DM, o'qituvchi-talaba, guruh, loyiha kanallari.
+     * O'qish: faqat a'zolar (+ admin moderatsiya uchun).
+     * TADQIQOTCHI XABAR MATNINI KO'RMAYDI — 9.4 etika bandi.
+     */
+    match /chats/{chatId} {
+      allow get, list: if isSignedIn()
+                       && (request.auth.uid in resource.data.get('memberUids', []) || isAdmin());
+      // lastMessage'ni Cloud Function (onChatMessageCreated) yangilaydi.
+      allow write: if false;
+
+      /**
+       * messages — realtime chat. Klient o'zi yozadi (Firestore onSnapshot chat).
+       * Shartlar: chat a'zosi bo'lish, senderUid == o'zim, matn 1..4000 belgi,
+       * ts server vaqti. Tahrirlash yo'q; o'chirish o'rniga `deleted` bayrog'i
+       * (moderatsiya — o'qituvchi/admin).
+       */
+      match /messages/{msgId} {
+        function chatData() {
+          return get(/databases/$(database)/documents/chats/$(chatId)).data;
+        }
+        function isMember() {
+          return isSignedIn() && request.auth.uid in chatData().get('memberUids', []);
+        }
+
+        allow get, list: if isMember() || isAdmin();
+        allow create: if isMember()
+                      && request.resource.data.senderUid == request.auth.uid
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0
+                      && request.resource.data.text.size() <= 4000
+                      && request.resource.data.ts == request.time;
+        allow update: if (isAdmin() || isTeacher() || isOwner(resource.data.senderUid))
+                      && onlyChanges(['deleted']);
+        allow delete: if false;
+      }
+    }
+
+    /**
+     * presence/{uid} — online holati. Klient o'zi yozadi (arzon, xavfsiz).
+     */
+    match /presence/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(uid)
+                            && request.resource.data.keys().hasOnly(['online', 'lastSeen']);
+      allow delete: if false;
+    }
+
+    /**
+     * forumThreads + posts — muhokama forumi (global yoki guruh ichida).
+     * Talaba thread ochadi va post yozadi; tahrir faqat o'z postini;
+     * o'chirish — faqat o'qituvchi/admin moderatsiyasi orqali server tomonda.
+     */
+    match /forumThreads/{threadId} {
+      allow get, list: if isSignedIn()
+                       && (resource.data.get('groupId', null) == null
+                           || inGroup(resource.data.get('groupId', '__none__'))
+                           || teachesGroup(resource.data.get('groupId', '__none__'))
+                           || isAdmin() || isResearcher());
+      allow create: if isSignedIn()
+                    && request.resource.data.authorUid == request.auth.uid
+                    && request.resource.data.title is string
+                    && request.resource.data.title.size() > 0
+                    && request.resource.data.get('body', '').size() <= 8000;
+      // likes/lastPostAt/postCount — a'zolar yangilay oladi (like bosish).
+      allow update: if isSignedIn()
+                    && (onlyChanges(['likes', 'lastPostAt', 'postCount'])
+                        || (isOwner(resource.data.authorUid) && onlyChanges(['title', 'body', 'tags'])));
+      allow delete: if false;
+
+      match /posts/{postId} {
+        allow get, list: if isSignedIn();
+        allow create: if isSignedIn()
+                      && request.resource.data.authorUid == request.auth.uid
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0
+                      && request.resource.data.text.size() <= 8000
+                      && request.resource.data.ts == request.time;
+        allow update: if (isOwner(resource.data.authorUid) && onlyChanges(['text']))
+                      || onlyChanges(['likes']);
+        allow delete: if false;
+      }
+    }
+
+    /**
+     * notifications/{uid}/items/{id} — bildirishnomalar.
+     * Klient FAQAT `read` bayrog'ini o'zgartira oladi; matn va havolani server yozadi.
+     */
+    match /notifications/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+
+      match /items/{notifId} {
+        allow read: if isOwner(uid);
+        allow update: if isOwner(uid) && onlyChanges(['read']);
+        allow create, delete: if false;
+      }
+    }
+
+    /* =============================================================== */
+    /* 7. ILMIY MA'LUMOTLAR (Learning Analytics, PLAN 4.4 / 9)          */
+    /* =============================================================== */
+
+    /**
+     * statsDaily/{uid}_{date} — kunlik agregat.
+     * Talaba o'zinikini (dashboard grafiklari), o'qituvchi o'z guruhini,
+     * tadqiqotchi hammasini o'qiydi. Yozish — cron/Function.
+     */
+    match /statsDaily/{statId} {
+      allow get, list: if isOwner(resource.data.uid)
+                       || isAdmin() || isResearcher()
+                       || teachesDocGroup(resource.data)
+                       || teachesStudent(resource.data.uid);
+      allow write: if false;
+    }
+
+    /** statsGroupDaily — guruh agregatlari (scheduledDailyAggregation yozadi). */
+    match /statsGroupDaily/{statId} {
+      allow get, list: if isAdmin() || isResearcher()
+                       || teachesGroup(resource.data.get('groupId', '__none__'));
+      allow write: if false;
+    }
+
+    /** experiments — eksperiment dizayni. Faqat tadqiqotchi va admin. */
+    match /experiments/{experimentId} {
+      allow read: if isResearcher() || isAdmin();
+      allow write: if false;
+    }
+
+    /**
+     * predictions/{uid} — haftalik progress prognozi.
+     * Talabaning o'zi ham ko'radi (motivatsiya), o'qituvchi risk ro'yxati uchun.
+     */
+    match /predictions/{uid} {
+      allow read: if ownerOrTeacherOrAdmin(uid) || isResearcher();
+      allow write: if false;
+    }
+
+    /**
+     * events_{YYYY_MM} — APPEND-ONLY hodisa jurnali.
+     * Bu barcha ilmiy ma'lumotning manbai, shuning uchun:
+     *   - klient hech qachon yozmaydi (server `logEvent` orqali Admin SDK bilan),
+     *   - update/delete umuman yo'q (immutable),
+     *   - o'qish faqat tadqiqotchi va admin uchun.
+     * Kolleksiya nomi oy bo'yicha o'zgargani uchun wildcard + regexp ishlatiladi.
+     */
+    match /{eventsCollection}/{eventId} {
+      allow get, list: if eventsCollection.matches('events_[0-9]{4}_[0-9]{2}')
+                       && (isResearcher() || isAdmin());
+      allow create, update, delete: if false;
+    }
+
+    /* =============================================================== */
+    /* 8. DEFAULT DENY                                                  */
+    /* =============================================================== */
+
+    // Yuqorida ochiq ruxsat berilmagan har qanday yo'l — taqiqlangan.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

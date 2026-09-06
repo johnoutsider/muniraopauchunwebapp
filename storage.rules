@@ -1,0 +1,143 @@
+rules_version = '2';
+
+/**
+ * LinguaEcon AI — Firebase Storage qoidalari (PLAN.md 10-bo'lim).
+ *
+ * Yo'llar:
+ *   speaking/{uid}/{file}          — talabaning audio yozuvlari (WAV 16 kHz)
+ *   tts/{hash}.mp3                 — Azure Neural TTS keshlangan namuna audio
+ *   projects/{projectId}/{file}    — guruh loyihasi fayllari, prezentatsiyalar
+ *   avatars/{uid}                  — profil rasmi
+ *   exports/{file}                 — SPSS/Excel eksport paketlari (faqat server)
+ *   corpus/{file}                  — korpus xom matnlari (faqat server)
+ *
+ * Umumiy qoida: yozish imkoni faqat aniq zarur bo'lgan joyda; qolgani server
+ * (Admin SDK) orqali. Hajm va content-type har doim tekshiriladi.
+ */
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    /* ---------------- Yordamchi funksiyalar ---------------- */
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return isSignedIn() ? request.auth.token.get('role', 'student') : '';
+    }
+
+    function isAdmin()   { return role() == 'admin'; }
+    function isTeacher() { return role() == 'teacher'; }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Talabaning guruhi Firestore'dagi users hujjatidan olinadi.
+    function studentGroupOf(uid) {
+      return firestore.get(/databases/(default)/documents/users/$(uid)).data.get('groupId', '__none__');
+    }
+
+    // O'qituvchi shu talabaning guruhiga biriktirilganmi (token.groupIds).
+    function teachesStudent(uid) {
+      return isTeacher() && studentGroupOf(uid) in request.auth.token.get('groupIds', []);
+    }
+
+    function isAudio() {
+      return request.resource.contentType.matches('audio/.*');
+    }
+
+    function underBytes(mb) {
+      return request.resource.size < mb * 1024 * 1024;
+    }
+
+    /* ---------------- 1. Speaking Lab audio ---------------- */
+
+    /**
+     * speaking/{uid}/{file}
+     *  Yozish: FAQAT egasi; audio/* va ≤ 8 MB (PLAN 8.3 — yozuv ≤ 2 daqiqa,
+     *          16 kHz mono WAV ≈ 3.8 MB).
+     *  O'qish: egasi, uning o'qituvchisi, admin.
+     *  Tadqiqotchi xom audioni ko'rmaydi — unga faqat Azure ballari beriladi (9.4).
+     *  O'chirish: yo'q — urinishlar tarixi taqqoslash uchun saqlanadi.
+     */
+    match /speaking/{uid}/{fileName} {
+      allow read: if isOwner(uid) || isAdmin() || teachesStudent(uid);
+      allow create, update: if isOwner(uid) && isAudio() && underBytes(8);
+      allow delete: if isAdmin();
+    }
+
+    /* ---------------- 2. TTS keshi ---------------- */
+
+    /**
+     * tts/{hash}.mp3 — bir so'z/gap uchun bir marta generatsiya qilinadi va
+     * qayta ishlatiladi (xarajat nazorati, PLAN 16).
+     * O'qish: har qanday tizimga kirgan foydalanuvchi.
+     * Yozish: faqat server (Admin SDK) — klient TTS generatsiya qila olmaydi.
+     */
+    match /tts/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    /* ---------------- 3. Guruh loyihasi fayllari ---------------- */
+
+    /**
+     * projects/{projectId}/{file} — hisobot, prezentatsiya, rasm (≤ 25 MB).
+     * O'qish/yozish: loyiha a'zolari (Firestore projects.memberUids),
+     * shuningdek guruh o'qituvchisi va admin (baholash uchun).
+     */
+    match /projects/{projectId}/{fileName} {
+      function projectData() {
+        return firestore.get(/databases/(default)/documents/projects/$(projectId)).data;
+      }
+      function isMember() {
+        return isSignedIn() && request.auth.uid in projectData().get('memberUids', []);
+      }
+      function isProjectTeacher() {
+        return isTeacher() && projectData().get('groupId', '__none__') in request.auth.token.get('groupIds', []);
+      }
+
+      allow read: if isMember() || isProjectTeacher() || isAdmin();
+      allow create, update: if isMember() && underBytes(25);
+      allow delete: if isMember() || isAdmin();
+    }
+
+    /* ---------------- 4. Avatarlar ---------------- */
+
+    /**
+     * avatars/{uid} — profil rasmi. Ochiq o'qiladi (chat, forum, leaderboard'da
+     * ko'rinadi), yozish faqat egasi; rasm ≤ 2 MB.
+     */
+    match /avatars/{uid} {
+      allow read: if true;
+      allow create, update: if isOwner(uid)
+                            && request.resource.contentType.matches('image/.*')
+                            && underBytes(2);
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+
+    /* ---------------- 5. Server-only yo'llar ---------------- */
+
+    /**
+     * exports/{file} — SPSS/Excel/CSV paketlari. Route Handler generatsiya qiladi
+     * va vaqtinchalik signed URL beradi, shuning uchun bevosita o'qish yopiq.
+     */
+    match /exports/{fileName} {
+      allow read, write: if false;
+    }
+
+    /** corpus/{file} — korpus xom matnlari, faqat build skripti (Admin SDK). */
+    match /corpus/{fileName} {
+      allow read, write: if false;
+    }
+
+    /* ---------------- 6. Default deny ---------------- */
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

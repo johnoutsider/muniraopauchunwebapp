@@ -1,0 +1,9 @@
+{
+  "projects": {
+    "default": "linguaecon-dev",
+    "dev": "linguaecon-dev",
+    "prod": "linguaecon-prod"
+  },
+  "targets": {},
+  "etags": {}
+}

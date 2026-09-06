@@ -1,0 +1,10 @@
+# pnpm 11 native paketlarning build skriptlarini ruxsat so'raydi.
+# Quyidagilar loyihaning to'g'ridan-to'g'ri bog'liqliklaridan keladi.
+allowBuilds:
+  '@firebase/util': true
+  '@parcel/watcher': true
+  '@swc/core': true
+  esbuild: true
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true

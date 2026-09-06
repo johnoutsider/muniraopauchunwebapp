@@ -1,0 +1,78 @@
+name: CI
+
+# Push va PR'da: paketlar → typecheck → lint → unit testlar.
+# DEPLOY BU YERDA YO'Q — Vercel GitHub integratsiyasi orqali o'zi deploy qiladi
+# (main → production, boshqa branchlar → preview). PLAN 13, "0. Poydevor".
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Build/typecheck uchun kerak bo'ladigan "bo'sh" qiymatlar — sirlar emas.
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  quality:
+    name: Typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Repozitoriyani olish
+        uses: actions/checkout@v4
+
+      - name: pnpm o'rnatish
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Node.js 20 (pnpm keshi bilan)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Bog'liqliklarni o'rnatish
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript tekshiruvi
+        run: pnpm typecheck
+
+      - name: ESLint
+        run: pnpm lint
+
+      - name: Unit testlar (Vitest)
+        run: pnpm test
+
+  functions:
+    name: Cloud Functions build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Repozitoriyani olish
+        uses: actions/checkout@v4
+
+      - name: Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Functions alohida npm paketi (pnpm workspace'dan tashqarida) —
+      # Firebase deploy uni npm bilan yig'adi, CI ham xuddi shunday qiladi.
+      - name: Functions bog'liqliklari
+        working-directory: functions
+        run: npm ci || npm install
+
+      - name: Functions build
+        working-directory: functions
+        run: npm run build

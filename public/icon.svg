@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="LinguaEcon AI">
+  <title>LinguaEcon AI</title>
+  <!--
+    Logotip: "LE" monogrammasi nutq pufagi ichida.
+    "E" harfining uch tirnog'i o'sayotgan ustunli diagrammaga (iqtisodiy o'sish)
+    aylantirilgan — til + iqtisodiyot g'oyasi.
+    To'q ko'k asos borligi uchun logotip och va qorong'i fonda bir xil ko'rinadi.
+  -->
+  <rect width="64" height="64" rx="14" fill="#1659B5" />
+
+  <!-- Nutq pufagi -->
+  <g fill="#FFFFFF">
+    <rect x="8" y="10" width="48" height="34" rx="9" />
+    <path d="M16 42 L16 55 L29 43 Z" />
+  </g>
+
+  <!-- "L" -->
+  <path d="M15 17 h5.5 v14.5 h7.5 v5.5 h-13 z" fill="#1659B5" />
+
+  <!-- "E" tirnoqlari = o'sish diagrammasi -->
+  <rect x="32" y="31" width="5" height="6" rx="1.5" fill="#1659B5" />
+  <rect x="39" y="25" width="5" height="12" rx="1.5" fill="#1659B5" />
+  <rect x="46" y="17" width="5" height="20" rx="1.5" fill="#00AAAB" />
+</svg>

@@ -1,0 +1,163 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * LinguaEcon AI dizayn tizimi.
+ * Asosiy rang — akademik ko'k (ishonch, universitet), urg'u — teal (o'sish, progress).
+ */
+
+@theme {
+  --color-background: oklch(0.99 0.003 250);
+  --color-foreground: oklch(0.21 0.02 260);
+
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.21 0.02 260);
+
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.21 0.02 260);
+
+  --color-primary: oklch(0.48 0.16 258);
+  --color-primary-foreground: oklch(0.99 0.005 250);
+
+  --color-secondary: oklch(0.96 0.01 250);
+  --color-secondary-foreground: oklch(0.28 0.03 260);
+
+  --color-muted: oklch(0.96 0.008 250);
+  --color-muted-foreground: oklch(0.52 0.02 258);
+
+  --color-accent: oklch(0.66 0.13 195);
+  --color-accent-foreground: oklch(0.18 0.02 260);
+
+  --color-destructive: oklch(0.58 0.21 25);
+  --color-destructive-foreground: oklch(0.99 0 0);
+
+  --color-border: oklch(0.91 0.01 255);
+  --color-input: oklch(0.9 0.012 255);
+  --color-ring: oklch(0.48 0.16 258);
+
+  --color-chart-1: oklch(0.55 0.17 258);
+  --color-chart-2: oklch(0.65 0.14 190);
+  --color-chart-3: oklch(0.7 0.15 145);
+  --color-chart-4: oklch(0.75 0.15 75);
+  --color-chart-5: oklch(0.62 0.19 20);
+  --color-chart-6: oklch(0.6 0.16 305);
+
+  --radius: 0.625rem;
+
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
+}
+
+.dark {
+  --color-background: oklch(0.17 0.015 260);
+  --color-foreground: oklch(0.95 0.01 250);
+  --color-card: oklch(0.21 0.018 260);
+  --color-card-foreground: oklch(0.95 0.01 250);
+  --color-popover: oklch(0.21 0.018 260);
+  --color-popover-foreground: oklch(0.95 0.01 250);
+  --color-primary: oklch(0.68 0.15 258);
+  --color-primary-foreground: oklch(0.16 0.02 260);
+  --color-secondary: oklch(0.27 0.02 260);
+  --color-secondary-foreground: oklch(0.95 0.01 250);
+  --color-muted: oklch(0.26 0.018 260);
+  --color-muted-foreground: oklch(0.68 0.02 255);
+  --color-accent: oklch(0.7 0.12 195);
+  --color-accent-foreground: oklch(0.16 0.02 260);
+  --color-destructive: oklch(0.62 0.2 25);
+  --color-border: oklch(0.31 0.02 260);
+  --color-input: oklch(0.33 0.02 260);
+  --color-ring: oklch(0.68 0.15 258);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+
+  /* Fokus halqasi — klaviatura bilan navigatsiya uchun */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Bosqich rangi (8 bosqichli algoritm) */
+  .stage-organizational {
+    --stage-color: var(--color-chart-1);
+  }
+  .stage-practical {
+    --stage-color: var(--color-chart-3);
+  }
+  .stage-reflective {
+    --stage-color: var(--color-chart-4);
+  }
+}
+
+/* Audio to'lqin animatsiyasi (Speaking Lab) */
+@keyframes pulse-record {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.08);
+  }
+}
+
+.animate-record {
+  animation: pulse-record 1.4s ease-in-out infinite;
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
+}
+
+/* Chop etish (portfolio / hisobot) */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

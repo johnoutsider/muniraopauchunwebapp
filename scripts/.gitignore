@@ -1,0 +1,8 @@
+# Eksport natijalari (ilmiy ma'lumot — repozitoriyga tushmasin)
+out/
+
+# Korpus manba matnlari (katta, ochiq manbalardan qayta yuklanadi)
+corpus-src/*.txt
+
+# Import natijasi — ochiq parollar
+credentials*.csv
