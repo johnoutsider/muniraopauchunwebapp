@@ -1,16 +1,33 @@
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
 import { FlatCompat } from '@eslint/eslintrc'
+import nextPlugin from '@next/eslint-plugin-next'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const compat = new FlatCompat({ baseDirectory: __dirname })
 
 /**
  * ESLint 9 flat config.
- * `next lint` ham, to'g'ridan-to'g'ri `npx eslint .` ham shu fayldan foydalanadi.
+ *
+ * DIQQAT: bu faylning o'zini `ignores` ga qo'shmang. `next build` plaginni
+ * aniqlash uchun aynan shu fayl bo'yicha `calculateConfigForFile` chaqiradi;
+ * fayl e'tiborsiz qoldirilsa, "plugin was not detected" ogohlantirishi chiqadi.
+ *
+ * `next build` konfiguratsiyada `@next/next` plaginini nomi bo'yicha qidiradi.
+ * FlatCompat orqali kelgan qoidalar ishlaydi, lekin plagin nomi ko'rinmaydi va
+ * build "The Next.js plugin was not detected" deb ogohlantiradi. Shuning uchun
+ * plaginni ochiq ro'yxatga olamiz.
  */
-export default [
+const config = [
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
+  {
+    plugins: { '@next/next': nextPlugin },
+    rules: {
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs['core-web-vitals'].rules,
+    },
+  },
   {
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
@@ -28,7 +45,8 @@ export default [
       'functions/**',
       'scripts/out/**',
       'public/**',
-      '*.config.mjs',
     ],
   },
 ]
+
+export default config
