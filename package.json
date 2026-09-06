@@ -16,13 +16,13 @@
     "seed:items": "tsx scripts/generate-items.ts",
     "corpus:build": "tsx scripts/build-corpus.ts",
     "users:import": "tsx scripts/import-users.ts",
-    "emulators": "firebase emulators:start",
+    "emulators": "npx firebase emulators:start --only auth,firestore,storage",
     "admin:create": "tsx scripts/create-admin.ts",
     "admin:claims": "tsx scripts/set-claims.ts",
     "research:export": "tsx scripts/export-research.ts",
     "lint:fix": "eslint . --fix",
     "firebase:bootstrap": "tsx scripts/firebase-bootstrap.ts",
-    "firebase:deploy": "firebase deploy --only firestore:rules,firestore:indexes,storage,functions"
+    "firebase:deploy": "npx firebase deploy --only firestore:rules,firestore:indexes,storage,functions"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
@@ -76,7 +76,6 @@
     "@vitejs/plugin-react": "^4.4.0",
     "eslint": "^9.24.0",
     "eslint-config-next": "15.3.1",
-    "firebase-tools": "^15.29.0",
     "jsdom": "^26.1.0",
     "prettier": "^3.5.3",
     "tailwindcss": "^4.1.4",

@@ -1,15 +1,14 @@
 # pnpm 11 native paketlarning build skriptlari uchun ochiq ruxsat so'raydi.
-# Ruxsat berilmagan yoki qiymati yozilmagan paket bo'lsa, `pnpm install`
-# ERR_PNPM_IGNORED_BUILDS bilan yiqiladi (Vercel deploy ham shu sababdan uziladi).
+# Ruxsati yozilmagan paket qolsa, `pnpm install` ERR_PNPM_IGNORED_BUILDS bilan
+# yiqiladi va Vercel deploy'i o'rnatish bosqichida uziladi.
+#
+# Eslatma: firebase-tools ataylab bu yerda yo'q — u lokal administrator vositasi,
+# ilovaning bir qismi emas. `npx firebase ...` orqali chaqiriladi (scripts/README.md).
 allowBuilds:
   '@firebase/util': true
   '@parcel/watcher': true
   '@swc/core': true
   esbuild: true
   protobufjs: true
-  # re2 — firebase-tools ning ixtiyoriy native bog'liqligi (xavfsiz regex).
-  # Uni yig'ish node-gyp talab qiladi va CI da tez-tez yiqiladi; qurilmasa
-  # firebase-tools oddiy RegExp ga qaytadi, ya'ni zarari yo'q.
-  re2: false
   sharp: true
   unrs-resolver: true
