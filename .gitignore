@@ -31,3 +31,12 @@ prod.log
 
 # Firebase loyiha aliaslari (.firebaserc.example dan nusxa oling)
 .firebaserc
+
+# Firebase emulyator loglari va lokal ma‘lumotlar
+emulators.log
+firestore-debug.log
+ui-debug.log
+storage-debug.log
+
+# Claude Code lokal sozlamalari
+.claude/

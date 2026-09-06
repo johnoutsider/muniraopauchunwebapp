@@ -5,6 +5,14 @@ import { getAuth, type Auth } from 'firebase-admin/auth'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 
+/**
+ * Emulyator rejimi: Firestore/Auth/Storage emulyatorlari ishlaganda
+ * Admin SDK'ga haqiqiy service account kerak emas — faqat projectId yetarli.
+ */
+function usingEmulators(): boolean {
+  return Boolean(process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST)
+}
+
 function loadServiceAccount() {
   const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64
   if (b64) {
@@ -27,6 +35,19 @@ export function adminApp(): App {
     _app = existing[0]
     return _app
   }
+  if (usingEmulators()) {
+    const projectId =
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
+      process.env.GCLOUD_PROJECT ??
+      'linguaecon-dev'
+    _app = initializeApp({
+      projectId,
+      storageBucket:
+        process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? `${projectId}.firebasestorage.app`,
+    })
+    return _app
+  }
+
   const sa = loadServiceAccount()
   _app = initializeApp({
     credential: cert({

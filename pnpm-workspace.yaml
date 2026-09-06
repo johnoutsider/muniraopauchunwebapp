@@ -6,5 +6,6 @@ allowBuilds:
   '@swc/core': true
   esbuild: true
   protobufjs: true
+  re2: set this to true or false
   sharp: true
   unrs-resolver: true

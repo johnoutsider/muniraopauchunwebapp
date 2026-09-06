@@ -192,6 +192,19 @@ export function initAdmin(): App {
     return _app
   }
 
+  /* Emulyator rejimi — service account kerak emas, faqat projectId (docs/SETUP.md). */
+  if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+    const projectId =
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? process.env.GCLOUD_PROJECT ?? 'linguaecon-dev'
+    _app = initializeApp({
+      projectId,
+      storageBucket:
+        process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? `${projectId}.firebasestorage.app`,
+    })
+    log.detail(`Firebase EMULYATOR rejimi: ${c.bold(projectId)}`)
+    return _app
+  }
+
   const sa = loadServiceAccount()
   _app = initializeApp({
     credential: cert({

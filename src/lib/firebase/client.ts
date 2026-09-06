@@ -1,9 +1,9 @@
 'use client'
 
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app'
-import { getAuth, type Auth } from 'firebase/auth'
-import { getFirestore, type Firestore } from 'firebase/firestore'
-import { getStorage, type FirebaseStorage } from 'firebase/storage'
+import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth'
+import { connectFirestoreEmulator, getFirestore, type Firestore } from 'firebase/firestore'
+import { connectStorageEmulator, getStorage, type FirebaseStorage } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -14,6 +14,12 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 }
 
+/** Lokal Firebase Emulator Suite rejimi (haqiqiy loyihasiz ishlash uchun). */
+export const USE_EMULATOR = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === '1'
+
+const EMULATOR_HOST = process.env.NEXT_PUBLIC_EMULATOR_HOST ?? '127.0.0.1'
+const EMULATOR_PORTS = { auth: 9099, firestore: 8080, storage: 9199 } as const
+
 export function getFirebaseApp(): FirebaseApp {
   return getApps().length ? getApp() : initializeApp(firebaseConfig)
 }
@@ -23,23 +29,40 @@ let _db: Firestore | null = null
 let _storage: FirebaseStorage | null = null
 
 export function getFirebaseAuth(): Auth {
-  if (!_auth) _auth = getAuth(getFirebaseApp())
+  if (!_auth) {
+    _auth = getAuth(getFirebaseApp())
+    if (USE_EMULATOR) {
+      connectAuthEmulator(_auth, `http://${EMULATOR_HOST}:${EMULATOR_PORTS.auth}`, {
+        disableWarnings: true,
+      })
+    }
+  }
   return _auth
 }
 
 export function getDb(): Firestore {
-  if (!_db) _db = getFirestore(getFirebaseApp())
+  if (!_db) {
+    _db = getFirestore(getFirebaseApp())
+    if (USE_EMULATOR) {
+      connectFirestoreEmulator(_db, EMULATOR_HOST, EMULATOR_PORTS.firestore)
+    }
+  }
   return _db
 }
 
 export function getFirebaseStorage(): FirebaseStorage {
-  if (!_storage) _storage = getStorage(getFirebaseApp())
+  if (!_storage) {
+    _storage = getStorage(getFirebaseApp())
+    if (USE_EMULATOR) {
+      connectStorageEmulator(_storage, EMULATOR_HOST, EMULATOR_PORTS.storage)
+    }
+  }
   return _storage
 }
 
-/** App Check — faqat brauzerda va kalit mavjud bo'lsa (PLAN 10) */
+/** App Check — faqat brauzerda, kalit mavjud bo'lsa va emulyator rejimi o'chiq bo'lsa. */
 export async function initAppCheck() {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined' || USE_EMULATOR) return
   const siteKey = process.env.NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY
   if (!siteKey) return
   try {
