@@ -9,7 +9,35 @@ import { getStorage } from 'firebase-admin/storage'
  * Emulyator rejimi: Firestore/Auth/Storage emulyatorlari ishlaganda
  * Admin SDK'ga haqiqiy service account kerak emas — faqat projectId yetarli.
  */
+const EMULATOR_ENV_KEYS = [
+  'FIRESTORE_EMULATOR_HOST',
+  'FIREBASE_AUTH_EMULATOR_HOST',
+  'FIREBASE_STORAGE_EMULATOR_HOST',
+] as const
+
+/**
+ * Ishlab chiqarishda (Vercel yoki NODE_ENV=production) emulyator o'zgaruvchilari
+ * har doim xato sozlama — ular tasodifan `.env.local` dan ko'chib qolgan bo'ladi.
+ * Admin SDK ularni to'g'ridan-to'g'ri process.env dan o'qiydi va 127.0.0.1 ga
+ * ulanmoqchi bo'lib ECONNREFUSED beradi. Shuning uchun ularni olib tashlaymiz
+ * va bir marta ogohlantiramiz.
+ */
+function stripEmulatorEnvInProduction(): void {
+  const isProduction = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production'
+  if (!isProduction) return
+  const found = EMULATOR_ENV_KEYS.filter((key) => process.env[key])
+  if (!found.length) return
+  for (const key of found) delete process.env[key]
+  console.warn(
+    `[firebase/admin] Ishlab chiqarish muhitida emulyator o‘zgaruvchilari e’tiborsiz qoldirildi: ${found.join(', ')}. Ularni Vercel Environment Variables dan o‘chiring.`
+  )
+}
+
+// Modul yuklanishida ham bir marta — SDK o'zgaruvchilarni o'qishidan oldin.
+stripEmulatorEnvInProduction()
+
 function usingEmulators(): boolean {
+  stripEmulatorEnvInProduction()
   return Boolean(process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST)
 }
 

@@ -14,8 +14,19 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 }
 
-/** Lokal Firebase Emulator Suite rejimi (haqiqiy loyihasiz ishlash uchun). */
-export const USE_EMULATOR = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === '1'
+/**
+ * Lokal Firebase Emulator Suite rejimi (haqiqiy loyihasiz ishlash uchun).
+ * Faqat localhost da ishlaydi: bayroq tasodifan Vercel ga ko'chib qolsa ham,
+ * brauzer haqiqiy Firebase ga ulanaveradi (127.0.0.1:9099 ga emas).
+ */
+function onLocalhost(): boolean {
+  if (typeof window === 'undefined') return process.env.NODE_ENV !== 'production'
+  const host = window.location.hostname
+  return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.localhost')
+}
+
+export const USE_EMULATOR =
+  process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === '1' && onLocalhost()
 
 const EMULATOR_HOST = process.env.NEXT_PUBLIC_EMULATOR_HOST ?? '127.0.0.1'
 const EMULATOR_PORTS = { auth: 9099, firestore: 8080, storage: 9199 } as const
