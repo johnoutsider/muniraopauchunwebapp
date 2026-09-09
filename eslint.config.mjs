@@ -45,6 +45,8 @@ const config = [
       'functions/**',
       'scripts/out/**',
       'public/**',
+      // Next.js avtomatik generatsiya qiladi; uchlik-slash havolasi ataylab.
+      'next-env.d.ts',
     ],
   },
 ]

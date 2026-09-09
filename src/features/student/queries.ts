@@ -291,6 +291,9 @@ export const hasReflectionToday = cache(async (uid: string): Promise<boolean> =>
     .collection(COL.reflections)
     .where('uid', '==', uid)
     .where('ts', '>=', start)
+    // `orderBy` ataylab: mavjud (uid ASC, ts DESC) kompozit indeksidan foydalanadi.
+    // Usiz Firestore (uid ASC, ts ASC) indeksini talab qiladi va FAILED_PRECONDITION beradi.
+    .orderBy('ts', 'desc')
     .limit(1)
     .get()
   return !snap.empty

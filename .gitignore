@@ -40,3 +40,6 @@ storage-debug.log
 
 # Claude Code lokal sozlamalari
 .claude/
+
+.vercel
+.env*
